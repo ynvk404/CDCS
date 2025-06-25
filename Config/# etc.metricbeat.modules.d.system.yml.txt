@@ -1,0 +1,61 @@
+# ============================
+# 1. CPU, Memory, Network, Process
+# ============================
+- module: system
+  period: 10s
+  metricsets:
+    - cpu
+    - load
+    - memory
+    - network
+    - process
+    - process_summary
+    - socket_summary
+  process.include_top_n:
+    by_cpu: 5
+    by_memory: 5
+  degrade_on_partial: false
+  fields:
+    log_type: metricbeat
+    environment: internal
+  fields_under_root: true
+  tags: ["idps", "metric", "system"]
+
+# ============================
+# 2. Filesystem (lọc mount point lỗi)
+# ============================
+- module: system
+  period: 1m
+  metricsets:
+    - filesystem
+    - fsstat
+  processors:
+    - drop_event.when.regexp:
+        system.filesystem.mount_point: '^/(sys|cgroup|proc|dev|etc|host|lib|snap|run|var/lib/docker)($|/)'
+    - drop_event.when.or:
+        - equals:
+            system.filesystem.fstype: 'overlay'
+        - equals:
+            system.filesystem.fstype: 'tmpfs'
+        - equals:
+            system.filesystem.fstype: 'squashfs'
+        - equals:
+            system.filesystem.fstype: 'devtmpfs'
+  fields:
+    log_type: metricbeat
+    environment: internal
+  fields_under_root: true
+  tags: ["idps", "metric", "filesystem"]
+
+# ============================
+# 3. Uptime
+# ============================
+- module: system
+  period: 15m
+  metricsets:
+    - uptime
+  fields:
+    log_type: metricbeat
+    environment: internal
+  fields_under_root: true
+  tags: ["idps", "metric", "uptime"]
