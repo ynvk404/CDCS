@@ -1,0 +1,32 @@
+server.port: 5601
+server.host: "0.0.0.0"
+
+logging:
+  appenders:
+    file:
+      type: file
+      fileName: /var/log/kibana/kibana.log
+      layout:
+        type: json
+  root:
+    appenders:
+      - default
+      - file
+
+pid.file: /run/kibana/kibana.pid
+
+elasticsearch.hosts: ['http://10.0.2.100:9200']
+elasticsearch.serviceAccountToken: AAEAAWVsYXN0aWMva2liYW5hL2Vucm9sbC1wcm9jZXNzLXRva2VuLTE3NDcyMDg5NTY5NjU6eUdCZHZINXNTZWVVU0NXV2V1YXN6dw
+
+xpack.fleet.outputs:
+  - id: fleet-default-output
+    name: default
+    is_default: true
+    is_default_monitoring: true
+    type: elasticsearch
+    hosts: ['https://10.0.0.100:9200']
+    ca_trusted_fingerprint: 60ffbe7c1a51a409ca2d76486d842ec6883aa585a3ff2cdffdedb88a042a7199
+
+xpack.encryptedSavedObjects.encryptionKey: d013900bdf3f65c3db8f1cda9d16b54f
+xpack.reporting.encryptionKey: 8510d4eeae4a7c6717aeda0c51fca155
+xpack.security.encryptionKey: 8cf9f13c033e3db57dfbac
