@@ -1,0 +1,106 @@
+filebeat.inputs:
+
+  - type: filestream
+    id: suricata-eve-logs
+    enabled: true
+    paths:
+      - /mnt/data/log/suricata/eve.json
+    parsers:
+      - ndjson:
+          target: ""
+          add_error_key: true
+    scan_frequency: 1s             # Quét file liên tục mỗi giây
+    close_eof: false               # Không đóng file khi EOF
+    close_inactive: 30m           # Không tắt harvester sớm
+    ignore_older: 72h
+    fields:
+      log_type: suricata
+      environment: internal
+    fields_under_root: true
+    tags: ["internal", "idps", "suricata"]
+
+  - type: filestream
+    id: apache-access-log
+    enabled: true
+    paths:
+      - /var/log/apache2/access.log
+    exclude_files: ['\.gz$', '\.1$']
+    parsers:
+      - multiline:
+          type: pattern
+          pattern: '^\['
+          negate: true
+          match: after
+    ignore_older: 72h
+    fields:
+      log_type: apache_access
+      environment: internal
+    fields_under_root: true
+    tags: ["internal", "apache", "access"]
+
+  - type: filestream
+    id: apache-error-log
+    enabled: true
+    paths:
+      - /var/log/apache2/error.log
+    exclude_files: ['\.gz$', '\.1$']
+    ignore_older: 72h
+    fields:
+      log_type: apache_error
+      environment: internal
+    fields_under_root: true
+    tags: ["internal", "apache", "error"]
+
+  - type: filestream
+    id: system-logs
+    enabled: true
+    paths:
+      - /var/log/syslog
+      - /var/log/auth.log
+      - /var/log/kern.log
+    exclude_files: ['\.gz$', '\.1$']
+    ignore_older: 72h
+    fields:
+      log_type: system
+      environment: internal
+    fields_under_root: true
+    tags: ["internal", "system", "logs"]
+
+# ===============================
+# Processors
+# ===============================
+processors:
+  - add_host_metadata:
+      when.not.contains.tags: ["forwarded"]
+  - add_cloud_metadata: ~
+  - drop_fields:
+      fields: ["input", "agent", "ecs", "log", "host.hostname"]
+      ignore_missing: true
+
+# ===============================
+# Output
+# ===============================
+output.logstash:
+  hosts: ["10.0.2.100:5044"]
+  loadbalance: true
+  worker: 4                     # Tăng số luồng đẩy log
+  bulk_max_size: 4096          # Gửi nhiều log hơn mỗi đợt
+
+# ===============================
+# Queue
+# ===============================
+queue.mem:
+  events: 16384                # Tăng queue để tránh nghẽn
+  flush.min_events: 1024
+  flush.timeout: 2s            # Gửi nhanh hơn mỗi 2 giây
+
+# ===============================
+# Logging
+# ===============================
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /var/log/filebeat
+  name: filebeat.log
+  keepfiles: 7
+  permissions: 0644
