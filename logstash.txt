@@ -1,0 +1,264 @@
+input {
+  beats {
+    port => 5044
+    host => "0.0.0.0"
+  }
+}
+
+filter {
+  ###########################
+  # 0. Chuẩn hoá host.name
+  ###########################
+  if [host][name] and [host][name] =~ /\[.+\]/ {
+    ruby {
+      code => "
+        h = event.get('host')
+        if h['name'].is_a?(Array)
+          event.set('[host][name]', h['name'][0])
+        end
+      "
+    }
+  }
+
+  ###########################
+  # 1. Chuẩn hoá log_type
+  ###########################
+  mutate {
+    lowercase => ["log_type"]
+    add_field => {
+      "[event][module]"  => "%{log_type}"
+      "[event][dataset]" => "%{log_type}"
+    }
+  }
+
+  ###########################
+  # 2. SURICATA
+  ###########################
+  if [log_type] == "suricata" {
+    date {
+      match => ["timestamp", "ISO8601"]
+      target => "@timestamp"
+    }
+    if [event_type] == "alert" {
+      mutate {
+        replace => { "[host][name]" => "suricata-alert" }
+        add_field => {
+          "suricata_signature"        => "%{[alert][signature]}"
+          "suricata_category"         => "%{[alert][category]}"
+          "suricata_severity"         => "%{[alert][severity]}"
+          "suricata_action"           => "%{[alert][action]}"
+          "suricata_gid"              => "%{[alert][gid]}"
+          "suricata_signature_id"     => "%{[alert][signature_id]}"
+          "suricata_rev"              => "%{[alert][rev]}"
+          "suricata_metadata"         => "%{[alert][metadata]}"
+          "suricata_classification"   => "%{[alert][classification]}"
+          "suricata_references"       => "%{[alert][references]}"
+          "suricata_src_ip"           => "%{[src_ip]}"
+          "suricata_src_port"         => "%{[src_port]}"
+          "suricata_dest_ip"          => "%{[dest_ip]}"
+          "suricata_dest_port"        => "%{[dest_port]}"
+          "suricata_proto"            => "%{[proto]}"
+          "suricata_app_proto"        => "%{[app_proto]}"
+          "suricata_packet_size"      => "%{[packet_size]}"
+          "suricata_http_hostname"    => "%{[http][hostname]}"
+          "suricata_http_url"         => "%{[http][url]}"
+          "suricata_http_user_agent"  => "%{[http][http_user_agent]}"
+          "suricata_http_method"      => "%{[http][http_method]}"
+          "suricata_http_protocol"    => "%{[http][protocol]}"
+          "suricata_tls_version"      => "%{[tls][version]}"
+          "suricata_tls_sni"          => "%{[tls][sni]}"
+          "suricata_smtp_helo"        => "%{[smtp][helo]}"
+          "suricata_smtp_mail_from"   => "%{[smtp][mail_from]}"
+          "suricata_smtp_rcpt_to"     => "%{[smtp][rcpt_to]}"
+        }
+      }
+
+      geoip {
+        source => "[src_ip]"
+        target => "suricata_src_geo"
+        database => "/etc/logstash/geoip/GeoLite2-City.mmdb"
+      }
+      geoip {
+        source => "[dest_ip]"
+        target => "suricata_dest_geo"
+        database => "/etc/logstash/geoip/GeoLite2-City.mmdb"
+      }
+      mutate {
+        convert => {
+          "[alert][severity]"     => "integer"
+          "[alert][gid]"          => "integer"
+          "[alert][signature_id]" => "integer"
+          "[alert][rev]"          => "integer"
+          "src_port"              => "integer"
+          "dest_port"             => "integer"
+          "packet_size"           => "integer"
+          "flow_id"               => "integer"
+          "tx_id"                 => "integer"
+        }
+      }
+
+      ruby {
+        code => "
+          if event.get('[alert][references]').is_a?(Array)
+            event.set('suricata_references_str', event.get('[alert][references]').join(', '))
+          end
+          if event.get('[alert][metadata]').is_a?(Array)
+            event.set('suricata_metadata_str', event.get('[alert][metadata]').map(&:to_s).join(', '))
+          end
+        "
+      }
+
+      mutate {
+        add_field => { "[@metadata][index]" => "suricata-alert-%{+YYYY.MM.dd}" }
+      }
+    } else {
+      mutate {
+        replace => { "[host][name]" => "suricata-nonalert" }
+        add_field => { "[@metadata][index]" => "suricata-other-%{+YYYY.MM.dd}" }
+      }
+    }
+  }
+
+  ###########################
+  # 3. Apache Access
+  ###########################
+  else if [log_type] == "apache_access" {
+    grok {
+      match => { "message" => "%{COMBINEDAPACHELOG}" }
+    }
+
+    mutate {
+      rename => {
+        "clientip"  => "apache_remote_ip"
+        "user"      => "apache_user"
+        "timestamp" => "apache_access_time"
+        "verb"      => "apache_method"
+        "request"   => "apache_path"
+        "response"  => "apache_code"
+        "bytes"     => "apache_sent_bytes"
+        "referrer"  => "apache_referrer"
+        "agent"     => "apache_agent"
+      }
+      add_field => { "[@metadata][index]" => "apache-access-%{[host][name]}-%{+YYYY.MM.dd}" }
+    }
+
+    date {
+      match => ["apache_access_time", "dd/MMM/yyyy:HH:mm:ss Z"]
+      target => "@timestamp"
+      remove_field => ["apache_access_time"]
+    }
+  }
+
+  ###########################
+  # 4. Apache Error
+  ###########################
+  else if [log_type] == "apache_error" {
+    grok {
+      match => {
+        "message" => "\[%{HTTPDATE:apache_error_time}\] \[%{DATA:apache_log_level}\]( \[pid %{NUMBER:apache_pid}\])? %{GREEDYDATA:apache_error_message}"
+      }
+    }
+
+    date {
+      match => ["apache_error_time", "dd/MMM/yyyy:HH:mm:ss Z"]
+      target => "@timestamp"
+      remove_field => ["apache_error_time"]
+    }
+
+    mutate {
+      add_field => { "[@metadata][index]" => "apache-error-%{[host][name]}-%{+YYYY.MM.dd}" }
+    }
+  }
+
+  ###########################
+  # 5. System Logs
+  ###########################
+  else if [log_type] == "system" {
+    grok {
+      match => {
+        "message" => "%{SYSLOGTIMESTAMP:system_timestamp} %{SYSLOGHOST:system_host} %{DATA:system_program}(?:\[%{POSINT:system_pid}\])?: %{GREEDYDATA:system_message}"
+      }
+    }
+
+    date {
+      match => ["system_timestamp", "MMM  d HH:mm:ss", "MMM dd HH:mm:ss"]
+      target => "@timestamp"
+    }
+
+    mutate {
+      add_field => { "[@metadata][index]" => "system-logs-%{[host][name]}-%{+YYYY.MM.dd}" }
+    }
+  }
+
+  ###########################
+  # 6. IPTABLES
+  ###########################
+  else if [log_type] == "iptables" {
+    grok {
+      match => {
+        "message" => ["%{SYSLOGTIMESTAMP:iptables_timestamp} %{SYSLOGHOST:iptables_host} kernel: \\[%{DATA}\\] IPTABLES_LOG: %{GREEDYDATA:iptables_data}"]
+      }
+    }
+
+    kv {
+      source => "iptables_data"
+      field_split => " "
+      value_split => "="
+      remove_field => ["iptables_data"]
+    }
+
+    geoip {
+      source => "SRC"
+      target => "iptables_src_geo"
+      database => "/etc/logstash/geoip/GeoLite2-City.mmdb"
+    }
+
+    geoip {
+      source => "DST"
+      target => "iptables_dst_geo"
+      database => "/etc/logstash/geoip/GeoLite2-City.mmdb"
+    }
+
+    mutate {
+      convert => {
+        "LEN" => "integer"
+        "TTL" => "integer"
+        "SPT" => "integer"
+        "DPT" => "integer"
+      }
+      rename => {
+        "SRC" => "iptables_src_ip"
+        "DST" => "iptables_dst_ip"
+        "SPT" => "iptables_src_port"
+        "DPT" => "iptables_dst_port"
+        "PROTO" => "iptables_protocol"
+        "MAC" => "iptables_mac"
+        "IN" => "iptables_in_iface"
+        "OUT" => "iptables_out_iface"
+      }
+      add_field => { "[@metadata][index]" => "iptables-logs-%{[host][name]}-%{+YYYY.MM.dd}" }
+    }
+  }
+
+  ###########################
+  # 7. Metricbeat → KHÔNG cần xử lý filter
+  ###########################
+  else if [log_type] == "metricbeat" {
+    mutate {
+      add_field => { "[@metadata][index]" => "metricbeat-%{[host][name]}-%{+YYYY.MM.dd}" }
+    }
+  }
+}
+
+output {
+  elasticsearch {
+    hosts => ["http://10.0.2.100:9200"]
+    index => "%{[@metadata][index]}"
+  }
+
+  if ![@metadata][index] {
+    file {
+      path => "/var/log/logstash/unknown.log"
+    }
+  }
+}
