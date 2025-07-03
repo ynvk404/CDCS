@@ -1,0 +1,25 @@
+# /elastalert2/config.yaml
+
+# Elasticsearch server
+es_host: localhost
+es_port: 9200
+use_ssl: false
+verify_certs: true
+
+# Chỉ mục dùng để ghi trạng thái của ElastAlert (alert history, errors, ...).
+writeback_index: elastalert_status
+
+# Khoảng thời gian mà ElastAlert sẽ lấy log từ Elasticsearch để xử lý.
+buffer_time:
+  minutes: 2
+
+# Chu kỳ chạy kiểm tra log mới
+run_every:
+  seconds: 10
+
+# Thời gian tối đa tính từ thời điểm log xảy ra cho đến khi được gửi alert
+alert_time_limit:
+  days: 1
+
+# Thư mục chứa các rule cảnh báo
+rules_folder: rules

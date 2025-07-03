@@ -1,0 +1,53 @@
+name: "📢 CẢNH BÁO AN NINH – Được gửi bởi ElastAlert"
+type: any
+
+index: "suricata-alert-*"
+
+filter:
+  - term:
+      event_type: "alert"
+
+realert:
+  seconds: 0
+
+alert:
+  - ms_teams
+
+ms_teams_webhook_url: "https://actvneduvn.webhook.office.com/webhookb2/6d34819c-97db-4485-b31c-da14d2153e88@0aa16d8a-a396-4e21-aa14-2a68a45786bc/IncomingWebhook/1df47d12344c4f9babee448dc67909a6/39850777-0e86-41f0-b8a9-d9c2be4a150b/V2YSt4ITGVYQzKgGmQRUiz7AV3l5OiBwvGCpcVDnbDggM1"
+
+alert_text_type: alert_text_only
+alert_text: |
+  📢 *Hệ thống đã phát hiện hoặc ngăn chặn một hành vi tấn công tiềm ẩn*
+
+  | 🏷️ Trường dữ liệu        | 🧾 Giá trị                                 |
+  |--------------------------|--------------------------------------------|
+  | 🕒 **Thời gian**         | {14}                                       |
+  | 🧾 **Rule**              | {0}                                        |
+  | 📁 **Loại tấn công**     | {1}                                        |
+  | ⚠ **Mức độ**            | {2}                                        |
+  | 🚨 **Hành động**         | {3}                                        |
+  | 🌍 **Nguồn**             | {4}:{5}                                    |
+  | 🎯 **Đích**              | {6}:{7}                                    |
+  | 🛜 **Giao thức**         | {8}                                        |
+  | 📡 **Ứng dụng**          | {9}                                        |
+  | 🌐 **Host**              | {10}                                       |
+  | 📎 **URL**               | {11}                                       |
+  | 🧭 **User-Agent**        | {12}                                       |
+  | 📍 **Vị trí nguồn**      | {13}                                       |
+
+alert_text_args:
+  - suricata_signature
+  - suricata_category
+  - suricata_severity
+  - suricata_action
+  - suricata_src_ip
+  - suricata_src_port
+  - suricata_dest_ip
+  - suricata_dest_port
+  - suricata_proto
+  - suricata_app_proto
+  - suricata_http_hostname
+  - suricata_http_url
+  - suricata_http_user_agent
+  - suricata_src_geo.geo.country_name
+  - vn_timestamp
