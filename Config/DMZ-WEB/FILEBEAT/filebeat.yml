@@ -1,0 +1,60 @@
+filebeat.inputs:
+
+  - type: filestream
+    id: apache-access-log
+    enabled: true
+    paths:
+      - /var/log/apache2/access.log
+    exclude_files: ['\.gz$', '\.1$']
+    parsers:
+      - multiline:
+          type: pattern
+          pattern: '^\['
+          negate: true
+          match: after
+    scan_frequency: 1s
+    close_eof: false
+    close_inactive: 30m
+    ignore_older: 72h
+    fields:
+      log_type: apache_access
+      environment: internal
+      hostname: dmz-web-dvwa
+    fields_under_root: true
+    tags: ["dmz-web-dvwa", "apache", "access"]
+
+  - type: filestream
+    id: apache-error-log
+    enabled: true
+    paths:
+      - /var/log/apache2/error.log
+    exclude_files: ['\.gz$', '\.1$']
+    scan_frequency: 1s
+    close_eof: false
+    close_inactive: 30m
+    ignore_older: 72h
+    fields:
+      log_type: apache_error
+      environment: internal
+      hostname: dmz-web-dvwa
+    fields_under_root: true
+    tags: ["dmz-web-dvwa", "apache", "error"]
+
+  - type: filestream
+    id: system-logs
+    enabled: true
+    paths:
+      - /var/log/syslog
+      - /var/log/auth.log
+      - /var/log/kern.log
+    exclude_files: ['\.gz$', '\.1$']
+    scan_frequency: 1s
+    close_eof: false
+    close_inactive: 30m
+    ignore_older: 72h
+    fields:
+      log_type: system
+      environment: internal
+      hostname: dmz-web-dvwa
+    fields_under_root: true
+    tags: ["dmz-web-dvwa", "system", "logs"]
